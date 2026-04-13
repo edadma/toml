@@ -41,9 +41,9 @@ Reference spec copies live in this repo as `v0.5.0.md`, `v1.0.0.md`, and `v1.1.0
 ## Module coordinates
 
 ```scala
-libraryDependencies += "io.github.edadma" %% "toml" % "0.0.3" // JVM
+libraryDependencies += "io.github.edadma" %% "toml" % "0.0.4" // JVM
 
-libraryDependencies += "io.github.edadma" %%% "toml" % "0.0.3" // cross: JS / Native via %%%
+libraryDependencies += "io.github.edadma" %%% "toml" % "0.0.4" // cross: JS / Native via %%%
 ```
 
 (Replace the version with the current release from Maven Central.)
