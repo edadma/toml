@@ -3,7 +3,7 @@ package io.github.edadma.toml
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.input.CharArrayReader.EofCh
 
-/** Lexical analyzer: [[StdLexical]] / standard tokens plus TOML-specific literals (TOML 1.0.0 string escapes). */
+/** Lexical analyzer based on `StdLexical`, with standard tokens plus TOML-specific literals (TOML 1.0.0 string escapes). */
 class TomlLexical extends StdLexical:
 
   delimiters ++= Seq("[", "]", "{", "}", "=", ",", ".")
