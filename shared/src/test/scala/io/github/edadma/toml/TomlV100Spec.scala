@@ -63,7 +63,7 @@ class TomlV100Spec extends AnyFlatSpec with Matchers:
         |a = 2
         |""".stripMargin,
     )
-    doc.root("x").asInstanceOf[TomlValue.Obj].fields("a") shouldBe TomlValue.Integer(2)
+    doc.root("x").asInstanceOf[TomlValue.Obj].fields("a") shouldBe TomlValue.Num(2)
 
   it should "reject [[fruit]] when fruit was a normal table from dotted keys" in:
     parseError(
@@ -119,7 +119,7 @@ class TomlV100Spec extends AnyFlatSpec with Matchers:
         |""".stripMargin,
     )
     val a = doc.root("a").asInstanceOf[TomlValue.Obj]
-    a.fields("b") shouldBe TomlValue.Integer(1)
-    a.fields("c") shouldBe TomlValue.Integer(2)
+    a.fields("b") shouldBe TomlValue.Num(1)
+    a.fields("c") shouldBe TomlValue.Num(2)
 
 end TomlV100Spec

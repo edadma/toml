@@ -82,7 +82,7 @@ private[edadma] object TomlDecode:
     val digits = body.replace("_", "")
     if digits.isEmpty then Left("empty radix integer")
     else
-      try Right(TomlValue.Integer(java.lang.Long.parseUnsignedLong(digits, radix)))
+      try Right(TomlValue.Num(java.lang.Long.parseUnsignedLong(digits, radix)))
       catch case _: NumberFormatException => Left(s"invalid integer: $body (radix $radix)")
 
   private def decimalInt(s: String): Either[String, TomlValue] =
@@ -99,7 +99,7 @@ private[edadma] object TomlDecode:
     else
       try
         val lit = (if negative then "-" else "") + unsigned
-        Right(TomlValue.Integer(java.lang.Long.parseLong(lit)))
+        Right(TomlValue.Num(java.lang.Long.parseLong(lit)))
       catch case _: NumberFormatException => Left(s"invalid or out-of-range integer: $s")
 
   private val isoDate = jtf.DateTimeFormatter.ISO_LOCAL_DATE

@@ -22,7 +22,7 @@ private[toml] object TomlTaggedJson:
     case TomlValue.Obj(fields)     => encodeTable(fields)
     case TomlValue.Arr(elems)      => Arr.from(elems.map(encodeValue))
     case TomlValue.Str(s)          => tagged("string", s)
-    case TomlValue.Integer(n)      => tagged("integer", n.toString)
+    case TomlValue.Num(n)          => tagged("integer", n.toString)
     case TomlValue.FloatVal(d)     => tagged("float", formatFloat(d))
     case TomlValue.Bool(b)         => tagged("bool", if b then "true" else "false")
     case TomlValue.OffsetDateTime(t) =>

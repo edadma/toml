@@ -6,15 +6,13 @@
 ![Scala Version](https://img.shields.io/badge/Scala-3.8.3-blue.svg)
 ![ScalaJS Version](https://img.shields.io/badge/Scala.js-1.20.2-blue.svg)
 ![Scala Native Version](https://img.shields.io/badge/Scala_Native-0.5.10-blue.svg)
-![TOML specification](https://img.shields.io/badge/TOML-v1.0.0-9333ea)
+[![TOML specification](https://img.shields.io/badge/TOML-v1.0.0-9333ea)](https://toml.io/en/v1.0.0)
 
 Cross-platform TOML parser for Scala 3, built on **scala-parser-combinators** (`StdLexical` / `StdTokenParsers`). Published artifacts target **JVM**, **JavaScript (Scala.js)**, and **Native (Scala Native)**.
 
-**Repository:** [github.com/edadma/toml](https://github.com/edadma/toml)
-
 ## TOML specification conformance
 
-The purple badge marks **[TOML v1.0.0](https://toml.io/en/v1.0.0)** as the **target**. Highlights:
+**[TOML v1.0.0](https://toml.io/en/v1.0.0)** highlights:
 
 - **Basic strings:** only the escapes listed in v1.0.0; **`\e` and `\xHH` are rejected** (v1.1.0).
 - **Arrays:** v1.0.0 allows **mixed types** (e.g. `[1, 2.0]` and nested arrays of different inner types).
@@ -27,7 +25,7 @@ The purple badge marks **[TOML v1.0.0](https://toml.io/en/v1.0.0)** as the **tar
 Clone [toml-lang/toml-test](https://github.com/toml-lang/toml-test) to `third_party/toml-test` (so `third_party/toml-test/tests/files-toml-1.0.0` exists). Then:
 
 ```bash
-sbt tomlJVM/testOnly io.github.edadma.toml.TomlOfficial1_0_0Spec
+sbt "tomlJVM/testOnly io.github.edadma.toml.TomlOfficial1_0_0Spec"
 ```
 
 The suite checks **every valid** case in `files-toml-1.0.0` against the tagged JSON expected by `toml-test`, and **every invalid** case in that list is required to fail `TomlParser.parse` (strict UTF-8 when reading files in the test harness).
@@ -41,9 +39,9 @@ Reference spec copies live in this repo as `v0.5.0.md`, `v1.0.0.md`, and `v1.1.0
 ## Module coordinates
 
 ```scala
-libraryDependencies += "io.github.edadma" %% "toml" % "0.0.4" // JVM
+libraryDependencies += "io.github.edadma" %% "toml" % "0.1.0" // JVM
 
-libraryDependencies += "io.github.edadma" %%% "toml" % "0.0.4" // cross: JS / Native via %%%
+libraryDependencies += "io.github.edadma" %%% "toml" % "0.1.0" // cross: JS / Native via %%%
 ```
 
 (Replace the version with the current release from Maven Central.)
@@ -64,11 +62,22 @@ val input = """title = "Demo"
 TomlParser.parse(input) match
   case Left(msg)  => println(s"parse error: $msg")
   case Right(doc) =>
-    val title = doc.root.get("title").collect { case Str(s) => s }
-    val count = doc.root.get("count").collect { case Integer(n) => n }
+    val title = doc.getString("title")
+    val count = doc.getInt("count") // Option[Long] — TOML integers are 64-bit
 ```
 
-The document root is a `Map[String, TomlValue]` on **`TomlDocument.root`**. Top-level keys are flat; nested TOML tables become **`TomlValue.Obj`** with a **`fields`** map.
+**`TomlDocument.root`** is a **`VectorMap[String, TomlValue]`**: it behaves like a map but **iterates keys in file order** (first-seen order), which helps config emitters round-trip section order. Nested tables are **`TomlValue.Obj`** with **`fields: VectorMap[String, TomlValue]`** (same ordering).
+
+**Dotted lookups** on the document (each segment is one key; dots are separators only):
+
+```scala
+doc.getString("kernel.name")
+doc.getInt("memory.page_size")
+doc.getTable("server")      // Option[VectorMap[String, TomlValue]]
+doc.get("nested.path")      // Option[TomlValue]
+```
+
+**`TomlValue`** extractors throw **`TomlTypeMismatch`** if the shape is wrong: **`toStr`**, **`toLong`** / **`toInt`** (both return `Long` for TOML integers), **`toDouble`**, **`toBool`**, **`toTable`**, **`toArr`**, plus **`toOffsetDateTime`**, **`toLocalDateTime`**, **`toLocalDate`**, **`toLocalTime`**.
 
 ```scala
 val cfg = """
@@ -78,11 +87,10 @@ val cfg = """
   |""".stripMargin
 
 TomlParser.parse(cfg).foreach { doc =>
-  doc.root.get("server").foreach {
-    case Obj(m) =>
-      val host = m.get("host").collect { case Str(s) => s }
-      val port = m.get("port").collect { case Integer(n) => n }
-    case _ =>
+  val host = doc.getString("server.host")
+  val port = doc.getInt("server.port")
+  doc.getTable("server").foreach { t =>
+    val h = t.get("host").map(_.toStr)
   }
 }
 ```
@@ -92,7 +100,7 @@ Arrays are **`TomlValue.Arr`** (`elems: List[TomlValue]`). TOML 1.0.0 allows **m
 ```scala
 val nums = TomlParser.parse("nums = [1, 2, 3]\n").toOption
   .flatMap(_.root.get("nums")) match
-  case Some(Arr(xs)) => xs.collect { case Integer(n) => n }
+  case Some(Arr(xs)) => xs.collect { case Num(n) => n }
   case _             => Nil
 ```
 
@@ -160,21 +168,17 @@ sbt tomlJS/test
 sbt tomlNative/test
 ```
 
+### Breaking changes in 0.1.0
+
+- **`TomlValue.Integer`** was renamed to **`TomlValue.Num`**.
+- **`TomlDocument.root`** and **`TomlValue.Obj.fields`** are **`VectorMap`** (ordered) instead of an unordered **`Map`**.
+
 ### Tests
 
-- **`TomlParserSpec`** — quick regression checks.
+- **`TomlParserSpec`** — quick regression checks, insertion order, and document/value accessors.
 - **`TomlV050Spec`** — broader hand-written cases (mostly shaped like v0.5.0 examples) covering keys, integers, floats, booleans, offset/local date-times, basic and multiline literal strings, arrays, tables, inline tables, array-of-tables, and comments, checked against **v1.0.0** rules where they apply (including bare keys that are only ASCII digits).
 - **`TomlV100Spec`** — duplicate `[table]` headers, dotted-key vs `[table]` redefine rules, `[[...]]` vs `[...]` conflicts, and related **TOML 1.0.0** builder errors.
 - **`TomlOfficial1_0_0Spec`** (JVM) — full **toml-test** `files-toml-1.0.0` valid + invalid lists when `third_party/toml-test` is present (or `TOML_TEST_ROOT` is set).
-
-## Publishing
-
-The build follows the same Sonatype / Maven Central layout as `cross_template` (sbt-sonatype, sbt-pgp). After credentials and signing are configured:
-
-```bash
-sbt publishSigned
-sbt sonatypeBundleRelease
-```
 
 ## License
 

@@ -24,19 +24,19 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
 
   it should "accept bare keys with letters, digits, underscore, hyphen" in:
     val doc = ok("key = 1\nbare_key = 2\nbare-key = 3\n")
-    doc.root("key") shouldBe TomlValue.Integer(1)
-    doc.root("bare_key") shouldBe TomlValue.Integer(2)
-    doc.root("bare-key") shouldBe TomlValue.Integer(3)
+    doc.root("key") shouldBe TomlValue.Num(1)
+    doc.root("bare_key") shouldBe TomlValue.Num(2)
+    doc.root("bare-key") shouldBe TomlValue.Num(3)
 
   it should "accept quoted keys (basic and literal)" in:
     val doc = ok("\"127.0.0.1\" = 1\n'x-y' = 2\n\"ʎǝʞ\" = 3\n")
-    doc.root("127.0.0.1") shouldBe TomlValue.Integer(1)
-    doc.root("x-y") shouldBe TomlValue.Integer(2)
-    doc.root("ʎǝʞ") shouldBe TomlValue.Integer(3)
+    doc.root("127.0.0.1") shouldBe TomlValue.Num(1)
+    doc.root("x-y") shouldBe TomlValue.Num(2)
+    doc.root("ʎǝʞ") shouldBe TomlValue.Num(3)
 
   it should "accept a single empty basic-string key" in:
     val doc = ok("\"\" = 1\n")
-    doc.root("") shouldBe TomlValue.Integer(1)
+    doc.root("") shouldBe TomlValue.Num(1)
 
   it should "reject duplicate empty keys when basic and literal both name the empty string" in:
     parseError("\"\" = 1\n'' = 2\n")
@@ -59,11 +59,11 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
 
   it should "accept decimal integers with sign and underscores" in:
     val doc = ok("int1 = +99\nint2 = 42\nint3 = 0\nint4 = -17\nint5 = 1_000\n")
-    doc.root("int1") shouldBe TomlValue.Integer(99)
-    doc.root("int2") shouldBe TomlValue.Integer(42)
-    doc.root("int3") shouldBe TomlValue.Integer(0)
-    doc.root("int4") shouldBe TomlValue.Integer(-17)
-    doc.root("int5") shouldBe TomlValue.Integer(1000)
+    doc.root("int1") shouldBe TomlValue.Num(99)
+    doc.root("int2") shouldBe TomlValue.Num(42)
+    doc.root("int3") shouldBe TomlValue.Num(0)
+    doc.root("int4") shouldBe TomlValue.Num(-17)
+    doc.root("int5") shouldBe TomlValue.Num(1000)
 
   it should "reject leading zeros in decimal integers" in:
     parseError("a = 0123\n")
@@ -74,10 +74,10 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
         "oct1 = 0o01234567\noct2 = 0o755\n" +
         "bin1 = 0b11010110\n",
     )
-    doc.root("hex1") shouldBe TomlValue.Integer(0xdeadbeefL)
-    doc.root("hex3") shouldBe TomlValue.Integer(0xdeadbeefL)
-    doc.root("oct2") shouldBe TomlValue.Integer(493L)
-    doc.root("bin1") shouldBe TomlValue.Integer(214L)
+    doc.root("hex1") shouldBe TomlValue.Num(0xdeadbeefL)
+    doc.root("hex3") shouldBe TomlValue.Num(0xdeadbeefL)
+    doc.root("oct2") shouldBe TomlValue.Num(493L)
+    doc.root("bin1") shouldBe TomlValue.Num(214L)
 
   // --- Floats (v0.5.0 § Float) ---
 
@@ -165,7 +165,7 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
         |""".stripMargin,
     )
     doc.root("arr1") shouldBe TomlValue.Arr(
-      List(TomlValue.Integer(1), TomlValue.Integer(2), TomlValue.Integer(3)),
+      List(TomlValue.Num(1), TomlValue.Num(2), TomlValue.Num(3)),
     )
     doc.root("arr3").asInstanceOf[TomlValue.Arr].elems should have length 2
 
@@ -182,8 +182,8 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
 
   it should "accept standard and nested table headers" in:
     val doc = ok("[table-1]\nkey1 = 1\n[table-2]\nkey2 = 2\n[a.b]\nx = 3\n")
-    doc.root("table-1").asInstanceOf[TomlValue.Obj].fields("key1") shouldBe TomlValue.Integer(1)
-    doc.root("a").asInstanceOf[TomlValue.Obj].fields("b").asInstanceOf[TomlValue.Obj].fields("x") shouldBe TomlValue.Integer(3)
+    doc.root("table-1").asInstanceOf[TomlValue.Obj].fields("key1") shouldBe TomlValue.Num(1)
+    doc.root("a").asInstanceOf[TomlValue.Obj].fields("b").asInstanceOf[TomlValue.Obj].fields("x") shouldBe TomlValue.Num(3)
 
   it should "accept quoted segments in table headers" in:
     val doc = ok("[dog.\"tater.man\"]\ntype.name = \"pug\"\n")
@@ -197,12 +197,12 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
     val y = x.fields("y").asInstanceOf[TomlValue.Obj]
     val z = y.fields("z").asInstanceOf[TomlValue.Obj]
     val w = z.fields("w").asInstanceOf[TomlValue.Obj]
-    w.fields("k") shouldBe TomlValue.Integer(1)
+    w.fields("k") shouldBe TomlValue.Num(1)
 
   it should "ignore whitespace padding in table header segments" in:
     val doc = ok("[ g . h . i ]\nk = 1\n")
     val g = doc.root("g").asInstanceOf[TomlValue.Obj]
-    g.fields("h").asInstanceOf[TomlValue.Obj].fields("i").asInstanceOf[TomlValue.Obj].fields("k") shouldBe TomlValue.Integer(1)
+    g.fields("h").asInstanceOf[TomlValue.Obj].fields("i").asInstanceOf[TomlValue.Obj].fields("k") shouldBe TomlValue.Num(1)
 
   // --- Inline table (v0.5.0 § Inline Table) ---
 
@@ -216,7 +216,7 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
     val doc = ok("points = [ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 } ]\n")
     val arr = doc.root("points").asInstanceOf[TomlValue.Arr]
     arr.elems should have length 2
-    arr.elems.head.asInstanceOf[TomlValue.Obj].fields("x") shouldBe TomlValue.Integer(1)
+    arr.elems.head.asInstanceOf[TomlValue.Obj].fields("x") shouldBe TomlValue.Num(1)
 
   // --- Array of tables (v0.5.0 § Array of Tables) ---
 
@@ -257,6 +257,6 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
 
   it should "treat # as full-line and end-of-line comments" in:
     val doc = ok("# c1\na = 1 # c2\n")
-    doc.root("a") shouldBe TomlValue.Integer(1)
+    doc.root("a") shouldBe TomlValue.Num(1)
 
 end TomlV050Spec

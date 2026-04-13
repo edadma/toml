@@ -1,5 +1,6 @@
 package io.github.edadma.toml
 
+import scala.collection.immutable.VectorMap
 import scala.collection.mutable
 
 /** Mutable tree while building; converted to immutable [[TomlDocument]]. */
@@ -14,8 +15,8 @@ private object TNode:
 object TomlBuilder:
 
   /** Merge inline-table dotted pairs into a nested [[TomlValue.Obj]]. */
-  def mergeInlinePairs(pairs: List[(List[String], TomlValue)]): Either[String, Map[String, TomlValue]] =
-    val m = mutable.Map.empty[String, TNode]
+  def mergeInlinePairs(pairs: List[(List[String], TomlValue)]): Either[String, VectorMap[String, TomlValue]] =
+    val m: mutable.Map[String, TNode] = mutable.LinkedHashMap.empty
     val err = mutable.ArrayBuffer.empty[String]
     val inlineBan = mutable.Set.empty[List[String]]
     val noExplicit = mutable.Set.empty[List[String]]
@@ -27,8 +28,8 @@ object TomlBuilder:
     else Right(freezeMap(m))
 
   def build(stmts: List[TomlStmt]): Either[String, TomlDocument] =
-    val root = mutable.Map.empty[String, TNode]
-    var focus = root
+    val root: mutable.Map[String, TNode] = mutable.LinkedHashMap.empty
+    var focus: mutable.Map[String, TNode] = root
     val err = mutable.ArrayBuffer.empty[String]
     /** Paths already opened with a standard `[table]` header (TOML 1.0.0 duplicate / redefine rules). */
     val explicitStd = mutable.Set.empty[List[String]]
@@ -52,7 +53,7 @@ object TomlBuilder:
             case Some(TNode.Table(inner)) =>
               navigateTablePath(inner, t)
             case None =>
-              val inner = mutable.Map.empty[String, TNode]
+              val inner: mutable.Map[String, TNode] = mutable.LinkedHashMap.empty
               m(h) = TNode.Table(inner)
               navigateTablePath(inner, t)
             case Some(TNode.Leaf(_)) =>
@@ -87,7 +88,7 @@ object TomlBuilder:
           val isLast = rest.isEmpty
           cur.get(seg) match
             case None =>
-              val inner = mutable.Map.empty[String, TNode]
+              val inner: mutable.Map[String, TNode] = mutable.LinkedHashMap.empty
               cur(seg) = TNode.Table(inner)
               if isLast then Some(inner) else walkOpenStandard(inner, rest, fullPath)
             case Some(TNode.Leaf(_)) =>
@@ -134,13 +135,13 @@ object TomlBuilder:
         else
           parent.get(name) match
             case None =>
-              val row = mutable.Map.empty[String, TNode]
+              val row: mutable.Map[String, TNode] = mutable.LinkedHashMap.empty
               val buf = mutable.ArrayBuffer(row)
               parent(name) = TNode.TableArray(buf)
               Some(row)
             case Some(TNode.TableArray(buf)) =>
               if buf.nonEmpty then clearExplicitUnder(path)
-              val row = mutable.Map.empty[String, TNode]
+              val row: mutable.Map[String, TNode] = mutable.LinkedHashMap.empty
               buf += row
               Some(row)
             case Some(_) =>
@@ -216,7 +217,7 @@ object TomlBuilder:
               implicitFromDotted,
             )
           case None =>
-            val child = mutable.Map.empty[String, TNode]
+            val child: mutable.Map[String, TNode] = mutable.LinkedHashMap.empty
             target(k) = TNode.Table(child)
             if pathToTarget.nonEmpty then implicitFromDotted += (pathToTarget :+ k)
             putDottedWithErr(
@@ -234,8 +235,8 @@ object TomlBuilder:
           case Some(TNode.Leaf(_)) =>
             err += s"cannot extend dotted key under '$k': not a table"
 
-  private def freezeMap(m: mutable.Map[String, TNode]): Map[String, TomlValue] =
-    m.view.mapValues(freezeNode).toMap
+  private def freezeMap(m: mutable.Map[String, TNode]): VectorMap[String, TomlValue] =
+    VectorMap.from(m.map { case (k, n) => (k, freezeNode(n)) })
 
   private def freezeNode(n: TNode): TomlValue =
     n match
