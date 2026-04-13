@@ -71,7 +71,7 @@ toml/
 ## Building and testing
 
 ```bash
-git clone https://github.com/edadma/toml.git
+git clone git@github.com:edadma/toml.git
 cd toml
 ```
 
