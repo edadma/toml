@@ -36,7 +36,7 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / homepage := Some(url("https://github.com/edadma/toml"))
-ThisBuild / description := "TOML parser (v0.5.0 baseline, 1.0/1.1 extensions; Scala parser combinators + Packrat) for JVM, Scala.js, and Scala Native"
+ThisBuild / description := "TOML 1.0.0-oriented parser (Scala parser combinators + Packrat) for JVM, Scala.js, and Scala Native"
 
 ThisBuild / publishTo := sonatypePublishToBundle.value
 

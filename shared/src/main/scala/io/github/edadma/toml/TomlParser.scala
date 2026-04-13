@@ -45,7 +45,10 @@ object TomlParser extends StdTokenParsers with PackratParsers:
     )
 
   private lazy val arrayValue: PackratParser[TomlValue] =
-    keyword("[") ~> repsep(value, keyword(",")) <~ opt(keyword(",")) <~ keyword("]") ^^ TomlValue.Arr.apply
+    (keyword("[") ~> repsep(value, keyword(",")) <~ opt(keyword(",")) <~ keyword("]")) >> { elems =>
+      if TomlDecode.homogeneousTomlArrayValues(elems) then success(TomlValue.Arr(elems))
+      else failure("array values must be the same type (TOML 1.0.0)")
+    }
 
   private lazy val inlinePair: PackratParser[(List[String], TomlValue)] =
     dottedKey ~ keyword("=") ~ value ^^ { case k ~ _ ~ v => (k, v) }

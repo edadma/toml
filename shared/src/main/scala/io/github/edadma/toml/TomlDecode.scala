@@ -3,8 +3,29 @@ package io.github.edadma.toml
 import java.time as jt
 import java.time.format as jtf
 
-/** Map lexer text to [[TomlValue]] (numbers, floats, datetimes). */
+/** Map lexer text to [[TomlValue]] (numbers, floats, datetimes) and TOML 1.0.0 value rules. */
 private[edadma] object TomlDecode:
+
+  /** TOML 1.0.0: array elements must share the same type (all strings count as one type). */
+  def homogeneousTomlArrayValues(elems: List[TomlValue]): Boolean =
+    elems match
+      case Nil | List(_) => true
+      case h :: t =>
+        val k = valueKind(h)
+        t.forall(v => valueKind(v) == k)
+
+  private def valueKind(v: TomlValue): Int =
+    v match
+      case _: TomlValue.Str            => 0
+      case _: TomlValue.Integer        => 1
+      case _: TomlValue.FloatVal       => 2
+      case _: TomlValue.Bool           => 3
+      case _: TomlValue.Arr            => 4
+      case _: TomlValue.Obj            => 5
+      case _: TomlValue.OffsetDateTime => 6
+      case _: TomlValue.LocalDateTime  => 7
+      case _: TomlValue.LocalDate      => 8
+      case _: TomlValue.LocalTime      => 9
 
   def numericOrFloat(text: String): Either[String, TomlValue] =
     val s = text.trim

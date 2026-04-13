@@ -6,9 +6,9 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 /**
-  * Hand-written coverage for TOML v0.5.0-shaped documents (see https://toml.io/en/v0.5.0 ). The lexer
-  * is more permissive than a strict v0.5.0 validator; these tests assert what **this** implementation
-  * accepts and the resulting values, not an external toml-test corpus.
+  * Hand-written coverage for documents shaped like the v0.5.0 spec examples (see
+  * https://toml.io/en/v0.5.0 ). The implementation targets **TOML 1.0.0** (e.g. homogeneous arrays,
+  * no `\\e` / `\\x` escapes); these tests assert what **this** parser accepts and the resulting values.
   */
 class TomlV050Spec extends AnyFlatSpec with Matchers:
 
@@ -174,10 +174,8 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
     doc.root("arr4").asInstanceOf[TomlValue.Arr].elems should have length 4
     doc.root("arr4").asInstanceOf[TomlValue.Arr].elems.foreach(_.isInstanceOf[TomlValue.Str] shouldBe true)
 
-  // v0.5.0: mixed-type arrays are invalid — we still document current (permissive) behavior:
-  it should "permissively accept mixed int/float array (invalid in strict v0.5.0)" in:
-    val doc = ok("arr = [ 1, 2.0 ]\n")
-    doc.root("arr") shouldBe TomlValue.Arr(List(TomlValue.Integer(1), TomlValue.FloatVal(2.0)))
+  it should "reject mixed int/float arrays (TOML 1.0.0)" in:
+    parseError("arr = [ 1, 2.0 ]\n")
 
   // --- Tables (v0.5.0 § Table) ---
 

@@ -143,4 +143,15 @@ class TomlParserSpec extends AnyFlatSpec with Matchers:
     val doc = ok("s = \"\"\"say \"hello\" now\"\"\"\n")
     doc.root("s") shouldBe TomlValue.Str("say \"hello\" now")
 
+  it should "reject reserved basic-string escapes \\e and \\x (TOML 1.0.0)" in:
+    TomlParser.parse("a = \"\\e\"\n").isLeft shouldBe true
+    TomlParser.parse("a = \"\\x00\"\n").isLeft shouldBe true
+
+  it should "reject heterogeneous arrays (TOML 1.0.0)" in:
+    TomlParser.parse("a = [ 1, 2.0 ]\n").isLeft shouldBe true
+
+  it should "accept homogeneous arrays mixing string forms (TOML 1.0.0)" in:
+    val doc = ok("a = [ \"x\", 'y' ]\n")
+    doc.root("a").asInstanceOf[TomlValue.Arr].elems should have length 2
+
 end TomlParserSpec

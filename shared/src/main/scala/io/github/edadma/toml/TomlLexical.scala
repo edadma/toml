@@ -3,7 +3,7 @@ package io.github.edadma.toml
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.input.CharArrayReader.EofCh
 
-/** Lexical analyzer: [[StdLexical]] / standard tokens plus TOML-specific literals. */
+/** Lexical analyzer: [[StdLexical]] / standard tokens plus TOML-specific literals (TOML 1.0.0 string escapes). */
 class TomlLexical extends StdLexical:
 
   delimiters ++= Seq("[[", "]]", "[", "]", "{", "}", "=", ",", ".")
@@ -39,7 +39,7 @@ class TomlLexical extends StdLexical:
 
   private def unicodeBmp(n: Int): Parser[List[Char]] =
     if n >= 0 && n <= 0xffff && Character.isBmpCodePoint(n) then success(List(n.toChar))
-    else escFail("invalid \\u or \\x escape")
+    else escFail("invalid \\u escape")
 
   private def unicodeAny(n: Int): Parser[List[Char]] =
     if Character.isValidCodePoint(n) then success(Character.toChars(n).toList)
@@ -60,12 +60,12 @@ class TomlLexical extends StdLexical:
         case 'n'  => success(List('\n'))
         case 'f'  => success(List('\u000c'))
         case 'r'  => success(List('\r'))
-        case 'e'  => success(List('\u001b'))
         case '"'  => success(List('"'))
         case '\\' => success(List('\\'))
-        case 'x'  => hexValue(2).flatMap(unicodeBmp)
         case 'u'  => hexValue(4).flatMap(unicodeBmp)
         case 'U'  => hexValue(8).flatMap(unicodeAny)
+        case 'e' | 'x' =>
+          escFail("reserved escape \\e / \\x (invalid in TOML 1.0.0)")
         case c    => escFail(s"invalid escape \\$c")
       }
     )
