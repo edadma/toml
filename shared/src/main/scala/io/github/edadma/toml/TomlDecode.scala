@@ -6,26 +6,25 @@ import java.time.format as jtf
 /** Map lexer text to [[TomlValue]] (numbers, floats, datetimes) and TOML 1.0.0 value rules. */
 private[edadma] object TomlDecode:
 
-  /** TOML 1.0.0: array elements must share the same type (all strings count as one type). */
-  def homogeneousTomlArrayValues(elems: List[TomlValue]): Boolean =
-    elems match
-      case Nil | List(_) => true
-      case h :: t =>
-        val k = valueKind(h)
-        t.forall(v => valueKind(v) == k)
+  /** Each `_` sits between decimal digits; no leading/trailing/double `_`. */
+  private def underscoresOkDecimalRun(run: String): Boolean =
+    if run.contains("__") || run.startsWith("_") || run.endsWith("_") then false
+    else run.split('_').forall(s => s.nonEmpty && s.forall(_.isDigit))
 
-  private def valueKind(v: TomlValue): Int =
-    v match
-      case _: TomlValue.Str            => 0
-      case _: TomlValue.Integer        => 1
-      case _: TomlValue.FloatVal       => 2
-      case _: TomlValue.Bool           => 3
-      case _: TomlValue.Arr            => 4
-      case _: TomlValue.Obj            => 5
-      case _: TomlValue.OffsetDateTime => 6
-      case _: TomlValue.LocalDateTime  => 7
-      case _: TomlValue.LocalDate      => 8
-      case _: TomlValue.LocalTime      => 9
+  private def underscoresOkRadixRun(run: String, digit: Char => Boolean): Boolean =
+    if run.contains("__") || run.startsWith("_") || run.endsWith("_") then false
+    else run.split('_').forall(s => s.nonEmpty && s.forall(digit))
+
+  private def underscoresOkSignedDecimalRun(run: String): Boolean =
+    if run.startsWith("+") || run.startsWith("-") then underscoresOkDecimalRun(run.drop(1))
+    else underscoresOkDecimalRun(run)
+
+  private def isHexDigit(c: Char): Boolean =
+    c.isDigit || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+
+  private def isOctDigit(c: Char): Boolean = c >= '0' && c <= '7'
+
+  private def isBinDigit(c: Char): Boolean = c == '0' || c == '1'
 
   def numericOrFloat(text: String): Either[String, TomlValue] =
     val s = text.trim
@@ -34,17 +33,50 @@ private[edadma] object TomlDecode:
       case "-inf"          => Right(TomlValue.FloatVal(Double.NegativeInfinity))
       case "nan" | "+nan"  => Right(TomlValue.FloatVal(Double.NaN))
       case "-nan"          => Right(TomlValue.FloatVal(java.lang.Double.longBitsToDouble(0xfff8000000000000L)))
-      case _ if s.startsWith("0x") || s.startsWith("0X") =>
-        radixInt(s.drop(2), 16)
-      case _ if s.startsWith("0o") || s.startsWith("0O") =>
-        radixInt(s.drop(2), 8)
-      case _ if s.startsWith("0b") || s.startsWith("0B") =>
-        radixInt(s.drop(2), 2)
+      case _ if s.startsWith("0x") =>
+        if !underscoresOkRadixRun(s.drop(2), isHexDigit) then Left(s"invalid underscore placement in integer: $s")
+        else radixInt(s.drop(2), 16)
+      case _ if s.startsWith("0o") =>
+        if !underscoresOkRadixRun(s.drop(2), isOctDigit) then Left(s"invalid underscore placement in integer: $s")
+        else radixInt(s.drop(2), 8)
+      case _ if s.startsWith("0b") =>
+        if !underscoresOkRadixRun(s.drop(2), isBinDigit) then Left(s"invalid underscore placement in integer: $s")
+        else radixInt(s.drop(2), 2)
       case _ if s.contains('.') || s.contains('e') || s.contains('E') =>
-        try Right(TomlValue.FloatVal(s.replace("_", "").toDouble))
-        catch case _: NumberFormatException => Left(s"invalid float: $s")
+        decodeFloat(s)
       case _ =>
-        decimalInt(s)
+        if !underscoresOkSignedDecimalRun(s) then Left(s"invalid underscore placement in integer: $s")
+        else decimalInt(s)
+
+  private def decodeFloat(s: String): Either[String, TomlValue] =
+    val eIdx = s.indexWhere(c => c == 'e' || c == 'E')
+    val (mantissa, expWithSign) =
+      if eIdx < 0 then (s, None)
+      else (s.take(eIdx), Some(s.drop(eIdx + 1)))
+    expWithSign match
+      case Some(exp) if !underscoresOkSignedDecimalRun(exp) =>
+        Left(s"invalid underscore placement in float: $s")
+      case _ =>
+        val dotIdx = mantissa.indexOf('.')
+        val (intRaw, fracRaw) =
+          if dotIdx < 0 then (mantissa, "")
+          else (mantissa.take(dotIdx), mantissa.drop(dotIdx + 1))
+        if intRaw.isEmpty then Left(s"invalid float: $s")
+        else if dotIdx >= 0 && fracRaw.replace("_", "").isEmpty then Left(s"invalid float: $s")
+        else if !underscoresOkSignedDecimalRun(intRaw) then Left(s"invalid underscore placement in float: $s")
+        else if fracRaw.nonEmpty && !underscoresOkDecimalRun(fracRaw) then
+          Left(s"invalid underscore placement in float: $s")
+        else
+          val intNoUs = intRaw.replace("_", "")
+          val intBody =
+            if intNoUs.startsWith("+") then intNoUs.drop(1)
+            else intNoUs
+          val intClean = if intBody.startsWith("-") then intBody.drop(1) else intBody
+          if intClean.length > 1 && intClean.charAt(0) == '0' then
+            Left(s"leading zero in float integer part: $s")
+          else
+            try Right(TomlValue.FloatVal(s.replace("_", "").toDouble))
+            catch case _: NumberFormatException => Left(s"invalid float: $s")
 
   private def radixInt(body: String, radix: Int): Either[String, TomlValue] =
     val digits = body.replace("_", "")
@@ -81,13 +113,16 @@ private[edadma] object TomlDecode:
     else
       def normSpace(s: String): String =
         val i = s.indexOf(' ')
-        if i > 0 && s.indexOf('T') < 0 && s.contains('-') then s.patch(i, "T", 1) else s
+        if i > 0 && s.indexOf('T') < 0 && s.indexOf('t') < 0 && s.contains('-') then s.patch(i, "T", 1)
+        else s
 
-      scala.util.Try(jt.OffsetDateTime.parse(normSpace(t), isoOffset)).toOption
+      val n = normSpace(t).replace('t', 'T').replace('z', 'Z')
+
+      scala.util.Try(jt.OffsetDateTime.parse(n, isoOffset)).toOption
         .map(TomlValue.OffsetDateTime.apply)
-        .orElse(scala.util.Try(jt.LocalDateTime.parse(t, isoLocalDateTime)).toOption.map(TomlValue.LocalDateTime.apply))
-        .orElse(scala.util.Try(jt.LocalDate.parse(t, isoDate)).toOption.map(TomlValue.LocalDate.apply))
-        .orElse(scala.util.Try(jt.LocalTime.parse(t, isoTime)).toOption.map(TomlValue.LocalTime.apply))
+        .orElse(scala.util.Try(jt.LocalDateTime.parse(n, isoLocalDateTime)).toOption.map(TomlValue.LocalDateTime.apply))
+        .orElse(scala.util.Try(jt.LocalDate.parse(n, isoDate)).toOption.map(TomlValue.LocalDate.apply))
+        .orElse(scala.util.Try(jt.LocalTime.parse(n, isoTime)).toOption.map(TomlValue.LocalTime.apply))
         .toRight(s"cannot parse datetime or time: $t")
 
 end TomlDecode

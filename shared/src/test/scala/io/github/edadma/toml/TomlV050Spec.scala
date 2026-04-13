@@ -7,8 +7,8 @@ import org.scalatest.matchers.should.Matchers
 
 /**
   * Hand-written coverage for documents shaped like the v0.5.0 spec examples (see
-  * https://toml.io/en/v0.5.0 ). The implementation targets **TOML 1.0.0** (e.g. homogeneous arrays,
-  * no `\\e` / `\\x` escapes); these tests assert what **this** parser accepts and the resulting values.
+  * https://toml.io/en/v0.5.0 ). The implementation targets **TOML 1.0.0** (arrays may mix types per spec;
+  * no `\\e` / `\\x` escapes). These tests assert what **this** parser accepts and the resulting values.
   */
 class TomlV050Spec extends AnyFlatSpec with Matchers:
 
@@ -169,13 +169,14 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
     )
     doc.root("arr3").asInstanceOf[TomlValue.Arr].elems should have length 2
 
-  it should "accept homogeneous string arrays mixing basic, literal, multiline forms (v0.5.0 same-type rule)" in:
+  it should "accept string arrays mixing basic, literal, multiline forms" in:
     val doc = ok("arr4 = [ \"all\", 'strings', \"\"\"are the same\"\"\", '''type''' ]\n")
     doc.root("arr4").asInstanceOf[TomlValue.Arr].elems should have length 4
     doc.root("arr4").asInstanceOf[TomlValue.Arr].elems.foreach(_.isInstanceOf[TomlValue.Str] shouldBe true)
 
-  it should "reject mixed int/float arrays (TOML 1.0.0)" in:
-    parseError("arr = [ 1, 2.0 ]\n")
+  it should "accept mixed int/float arrays (TOML 1.0.0)" in:
+    val doc = ok("arr = [ 1, 2.0 ]\n")
+    doc.root("arr").asInstanceOf[TomlValue.Arr].elems should have length 2
 
   // --- Tables (v0.5.0 § Table) ---
 
@@ -248,13 +249,9 @@ class TomlV050Spec extends AnyFlatSpec with Matchers:
     varieties.elems should have length 1
     varieties.elems.head.asInstanceOf[TomlValue.Obj].fields("name") shouldBe TomlValue.Str("red delicious")
 
-  // --- Lexer: bare key that is all digits (v0.5.0 allows) — currently shadowed by numeric literal token ---
-
-  it should "accept bare key that is only ASCII digits (v0.5.0)" ignore {
-    // TODO: un-ignore when lexical token order allows Ident before NumericLit for keys like `1234 = "x"`.
+  it should "accept bare key that is only ASCII digits (v0.5.0 / 1.0.0)" in:
     val doc = ok("1234 = \"only-digits\"\n")
     doc.root("1234") shouldBe TomlValue.Str("only-digits")
-  }
 
   // --- Comments ---
 

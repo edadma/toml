@@ -9,7 +9,7 @@ ThisBuild / scalaVersion           := "3.8.3"
 ThisBuild / organization           := "io.github.edadma"
 ThisBuild / organizationName       := "edadma"
 ThisBuild / organizationHomepage   := Some(url("https://github.com/edadma"))
-ThisBuild / version                := "0.0.2"
+ThisBuild / version                := "0.0.3"
 ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
 
 ThisBuild / publishConfiguration := publishConfiguration.value.withOverwrite(true).withChecksums(Vector.empty)
@@ -36,7 +36,7 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / homepage := Some(url("https://github.com/edadma/toml"))
-ThisBuild / description := "TOML 1.0.0-oriented parser (Scala parser combinators + Packrat) for JVM, Scala.js, and Scala Native"
+ThisBuild / description := "TOML 1.0.0-oriented parser (Scala parser combinators) for JVM, Scala.js, and Scala Native"
 
 ThisBuild / publishTo := sonatypePublishToBundle.value
 
@@ -63,6 +63,7 @@ lazy val toml = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   )
   .jvmSettings(
     libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
+    libraryDependencies += "com.lihaoyi" %% "ujson" % "4.3.2" % Test,
   )
   .nativeSettings(
     libraryDependencies += "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",

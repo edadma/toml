@@ -18,8 +18,10 @@ object TomlBuilder:
     val m = mutable.Map.empty[String, TNode]
     val err = mutable.ArrayBuffer.empty[String]
     val inlineBan = mutable.Set.empty[List[String]]
+    val noExplicit = mutable.Set.empty[List[String]]
+    val noImplicit = mutable.Set.empty[List[String]]
     pairs.foreach { case (segs, v) =>
-      putDottedWithErr(m, segs, TNode.Leaf(v), err, Nil, inlineBan)
+      putDottedWithErr(m, segs, TNode.Leaf(v), err, Nil, inlineBan, noExplicit, noImplicit)
     }
     if err.nonEmpty then Left(err.mkString("; "))
     else Right(freezeMap(m))
@@ -32,6 +34,8 @@ object TomlBuilder:
     val explicitStd = mutable.Set.empty[List[String]]
     /** Tables that hold a value from a multi-segment dotted key; cannot be reopened with `[path]` (TOML 1.0.0). */
     val dottedBan = mutable.Set.empty[List[String]]
+    /** Tables first created as intermediates of a dotted key; cannot later get a `[path]` header (TOML 1.0.0). */
+    val implicitFromDotted = mutable.Set.empty[List[String]]
     var focusAbsPath: List[String] = Nil
 
     /** Walk `path` from `m`; [[TNode.TableArray]] uses the last element’s map (TOML array-of-tables rules). */
@@ -102,12 +106,20 @@ object TomlBuilder:
             case Some(TNode.Table(inner)) =>
               if isLast then
                 if hasStrictExplicitExtension(fullPath) then Some(inner)
-                else if dottedBan.contains(fullPath) then
+                else if dottedBan.contains(fullPath) || implicitFromDotted.contains(fullPath) then
                   err += s"table header [${fullPath.mkString(".")}] redefines a table created from dotted keys"
                   None
                 else Some(inner)
               else
                 walkOpenStandard(inner, rest, fullPath)
+
+    /** New AoT row allows reopening `[child.*]` headers that were closed with the previous row (TOML 1.0.0). */
+    def clearExplicitUnder(path: List[String]): Unit =
+      def extendsPath(p: List[String]): Boolean =
+        p.length > path.length && p.take(path.length) == path
+      explicitStd.filterInPlace(p => !extendsPath(p))
+      dottedBan.filterInPlace(p => !extendsPath(p))
+      implicitFromDotted.filterInPlace(p => !extendsPath(p))
 
     def ensureTableArray(path: List[String]): Option[mutable.Map[String, TNode]] =
       if path.isEmpty then
@@ -127,6 +139,7 @@ object TomlBuilder:
               parent(name) = TNode.TableArray(buf)
               Some(row)
             case Some(TNode.TableArray(buf)) =>
+              if buf.nonEmpty then clearExplicitUnder(path)
               val row = mutable.Map.empty[String, TNode]
               buf += row
               Some(row)
@@ -145,7 +158,16 @@ object TomlBuilder:
               focusAbsPath = path
             case None => ()
         case TomlStmt.KeyValue(segments, value) =>
-          putDottedWithErr(focus, segments, TNode.Leaf(value), err, focusAbsPath, dottedBan)
+          putDottedWithErr(
+            focus,
+            segments,
+            TNode.Leaf(value),
+            err,
+            focusAbsPath,
+            dottedBan,
+            explicitStd,
+            implicitFromDotted,
+          )
 
     if err.nonEmpty then Left(err.mkString("; "))
     else Right(TomlDocument(freezeMap(root)))
@@ -158,7 +180,19 @@ object TomlBuilder:
       err: mutable.ArrayBuffer[String],
       pathToTarget: List[String],
       dottedBan: mutable.Set[List[String]],
+      explicitStd: mutable.Set[List[String]],
+      implicitFromDotted: mutable.Set[List[String]],
   ): Unit =
+    if segments.nonEmpty then
+      val fullTablePath = pathToTarget ++ segments.init
+      explicitStd.find { e =>
+        pathToTarget.length < e.length &&
+        e.take(pathToTarget.length) == pathToTarget &&
+        e.length <= fullTablePath.length &&
+        fullTablePath.take(e.length) == e
+      } foreach { e =>
+        err += s"dotted keys cannot extend table defined by [${e.mkString(".")}] from [${pathToTarget.mkString(".")}]"
+      }
     segments match
       case Nil => ()
       case k :: Nil =>
@@ -171,11 +205,30 @@ object TomlBuilder:
       case k :: rest =>
         target.get(k) match
           case Some(TNode.Table(child)) =>
-            putDottedWithErr(child, rest, leaf, err, pathToTarget :+ k, dottedBan)
+            putDottedWithErr(
+              child,
+              rest,
+              leaf,
+              err,
+              pathToTarget :+ k,
+              dottedBan,
+              explicitStd,
+              implicitFromDotted,
+            )
           case None =>
             val child = mutable.Map.empty[String, TNode]
             target(k) = TNode.Table(child)
-            putDottedWithErr(child, rest, leaf, err, pathToTarget :+ k, dottedBan)
+            if pathToTarget.nonEmpty then implicitFromDotted += (pathToTarget :+ k)
+            putDottedWithErr(
+              child,
+              rest,
+              leaf,
+              err,
+              pathToTarget :+ k,
+              dottedBan,
+              explicitStd,
+              implicitFromDotted,
+            )
           case Some(TNode.TableArray(_)) =>
             err += s"cannot extend dotted key under '$k': array, not a table"
           case Some(TNode.Leaf(_)) =>

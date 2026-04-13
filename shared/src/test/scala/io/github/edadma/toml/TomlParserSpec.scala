@@ -95,6 +95,13 @@ class TomlParserSpec extends AnyFlatSpec with Matchers:
       case _                       => fail(),
     )
 
+  it should "parse +nan" in:
+    val doc = ok("x = +nan\n")
+    doc.root("x").asInstanceOf[TomlValue.FloatVal].d.isNaN shouldBe true
+
+  it should "parse nan key followed by nan_plus = +nan" in:
+    ok("nan = nan\nnan_plus = +nan\n")
+
   it should "parse offset date-time and local date" in:
     val doc = ok("odt = 1979-05-27T07:32:00Z\nld = 1979-05-27\n")
     doc.root("odt") shouldBe TomlValue.OffsetDateTime(
@@ -147,8 +154,9 @@ class TomlParserSpec extends AnyFlatSpec with Matchers:
     TomlParser.parse("a = \"\\e\"\n").isLeft shouldBe true
     TomlParser.parse("a = \"\\x00\"\n").isLeft shouldBe true
 
-  it should "reject heterogeneous arrays (TOML 1.0.0)" in:
-    TomlParser.parse("a = [ 1, 2.0 ]\n").isLeft shouldBe true
+  it should "accept mixed-type arrays (TOML 1.0.0)" in:
+    val doc = ok("a = [ 1, 2.0 ]\n")
+    doc.root("a").asInstanceOf[TomlValue.Arr].elems should have length 2
 
   it should "accept homogeneous arrays mixing string forms (TOML 1.0.0)" in:
     val doc = ok("a = [ \"x\", 'y' ]\n")

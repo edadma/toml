@@ -8,30 +8,42 @@
 ![Scala Native Version](https://img.shields.io/badge/Scala_Native-0.5.10-blue.svg)
 ![TOML specification](https://img.shields.io/badge/TOML-v1.0.0-9333ea)
 
-Cross-platform TOML parser for Scala 3, built on **scala-parser-combinators** (`StdLexical` / `StdTokenParsers`) with **Packrat** parsing. Published artifacts target **JVM**, **JavaScript (Scala.js)**, and **Native (Scala Native)**.
+Cross-platform TOML parser for Scala 3, built on **scala-parser-combinators** (`StdLexical` / `StdTokenParsers`). Published artifacts target **JVM**, **JavaScript (Scala.js)**, and **Native (Scala Native)**.
 
 **Repository:** [github.com/edadma/toml](https://github.com/edadma/toml)
 
 ## TOML specification conformance
 
-The purple badge marks **[TOML v1.0.0](https://toml.io/en/v1.0.0)** as the **target**: the lexer and value rules aim to match that release where it is unambiguous, including:
+The purple badge marks **[TOML v1.0.0](https://toml.io/en/v1.0.0)** as the **target**. Highlights:
 
-- **Basic strings:** only the escapes listed in v1.0.0; **`\e` and `\xHH` are rejected** (they became defined only in v1.1.0).
-- **Arrays:** elements must share the same type (e.g. `[1, 2.0]` is rejected, as in the spec).
+- **Basic strings:** only the escapes listed in v1.0.0; **`\e` and `\xHH` are rejected** (v1.1.0).
+- **Arrays:** v1.0.0 allows **mixed types** (e.g. `[1, 2.0]` and nested arrays of different inner types).
 - **Single-line basic strings:** tab is allowed (v1.0.0), unlike v0.5.0.
 
-This is still **not** a complete, spec-test-suite–certified v1.0.0 implementation. **Implemented builder checks (1.0.0-style):** duplicate `[table]` headers; `[name]` on a key that is already an array of tables; `[[name]]` when `name` is already a normal table; static `arr = []` then `[[arr]]`; dotted-key table paths that cannot be reopened with a `[...]` header; super-table headers like `[x]` after `[x.y.z]` when valid.
+**Implemented builder checks:** duplicate `[table]` headers; `[name]` on a key that is already an array of tables; `[[name]]` when `name` is already a normal table; static `arr = []` then `[[arr]]`; dotted-key table paths that cannot be reopened with a `[...]` header; super-table headers like `[x]` after `[x.y.z]` when valid; new **array-of-tables row** clears nested `[child...]` header state so tables like `[a.b.c]` can reopen under each `[[a.b]]` (toml-test `valid/table/array-table-array.toml`).
 
-**Gaps** still include: incomplete ABNF coverage, control-character rules in strings, bare keys that are only digits (lexer quirk), some inline-table vs dotted-key edge cases, and other spec corner cases. Reference copies live in this repo as `v0.5.0.md`, `v1.0.0.md`, and `v1.1.0.md`.
+### Official `toml-test` corpus (JVM)
 
-**Not TOML 1.1.0:** documents that rely on v1.1-only features (notably **`\e`**, **`\xHH`**, and any other 1.1 deltas) may fail to parse.
+Clone [toml-lang/toml-test](https://github.com/toml-lang/toml-test) to `third_party/toml-test` (so `third_party/toml-test/tests/files-toml-1.0.0` exists). Then:
+
+```bash
+sbt tomlJVM/testOnly io.github.edadma.toml.TomlOfficial1_0_0Spec
+```
+
+The suite checks **every valid** case in `files-toml-1.0.0` against the tagged JSON expected by `toml-test`, and **every invalid** case in that list is required to fail `TomlParser.parse` (strict UTF-8 when reading files in the test harness).
+
+Three invalid **one-line** multiline-string fixtures (`multiline-quotes-01`, `literal-multiline-quotes-01` / `-02`) are rejected via an **exact-line** pre-check in `TomlParser.parse`, because the lexer can otherwise accept ambiguous closing-quote runs; everything else is handled by the lexer, decoder, and builder.
+
+Reference spec copies live in this repo as `v0.5.0.md`, `v1.0.0.md`, and `v1.1.0.md`.
+
+**Not TOML 1.1.0:** documents that rely on v1.1-only features (notably **`\e`**, **`\xHH`**, and other 1.1 deltas) may fail to parse.
 
 ## Module coordinates
 
 ```scala
-libraryDependencies += "io.github.edadma" %% "toml" % "0.0.2" // JVM
+libraryDependencies += "io.github.edadma" %% "toml" % "0.0.3" // JVM
 
-libraryDependencies += "io.github.edadma" %%% "toml" % "0.0.2" // cross: JS / Native via %%%
+libraryDependencies += "io.github.edadma" %%% "toml" % "0.0.3" // cross: JS / Native via %%%
 ```
 
 (Replace the version with the current release from Maven Central.)
@@ -75,7 +87,7 @@ TomlParser.parse(cfg).foreach { doc =>
 }
 ```
 
-Arrays are **`TomlValue.Arr`** (`elems: List[TomlValue]`). Elements are homogeneous per TOML 1.0.0 (this parser rejects mixed types).
+Arrays are **`TomlValue.Arr`** (`elems: List[TomlValue]`). TOML 1.0.0 allows **mixed element types**; this parser accepts them.
 
 ```scala
 val nums = TomlParser.parse("nums = [1, 2, 3]\n").toOption
@@ -151,10 +163,9 @@ sbt tomlNative/test
 ### Tests
 
 - **`TomlParserSpec`** — quick regression checks.
-- **`TomlV050Spec`** — broader hand-written cases (mostly shaped like v0.5.0 examples) covering keys, integers, floats, booleans, offset/local date-times, basic and multiline literal strings, arrays, tables, inline tables, array-of-tables, and comments, checked against **v1.0.0** rules where they apply. One case remains **ignored**: bare keys that are only ASCII digits (`1234 = "x"`), because the lexer currently prefers a numeric token over a bare key there.
+- **`TomlV050Spec`** — broader hand-written cases (mostly shaped like v0.5.0 examples) covering keys, integers, floats, booleans, offset/local date-times, basic and multiline literal strings, arrays, tables, inline tables, array-of-tables, and comments, checked against **v1.0.0** rules where they apply (including bare keys that are only ASCII digits).
 - **`TomlV100Spec`** — duplicate `[table]` headers, dotted-key vs `[table]` redefine rules, `[[...]]` vs `[...]` conflicts, and related **TOML 1.0.0** builder errors.
-
-This is **not** an exhaustive v1.0.0 conformance suite; see **Gaps** above.
+- **`TomlOfficial1_0_0Spec`** (JVM) — full **toml-test** `files-toml-1.0.0` valid + invalid lists when `third_party/toml-test` is present (or `TOML_TEST_ROOT` is set).
 
 ## Publishing
 

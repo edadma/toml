@@ -20,3 +20,6 @@ project/plugins/project/
 .directory
 .idea/
 .bsp/
+
+# Optional: clone toml-lang/toml-test here for TomlOfficial1_0_0Spec
+third_party/toml-test/
