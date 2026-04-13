@@ -29,9 +29,9 @@ This is still **not** a complete, spec-test-suite–certified v1.0.0 implementat
 ## Module coordinates
 
 ```scala
-libraryDependencies += "io.github.edadma" %% "toml" % "0.0.1" // JVM
+libraryDependencies += "io.github.edadma" %% "toml" % "0.0.2" // JVM
 
-libraryDependencies += "io.github.edadma" %%% "toml" % "0.0.1" // cross: JS / Native via %%%
+libraryDependencies += "io.github.edadma" %%% "toml" % "0.0.2" // cross: JS / Native via %%%
 ```
 
 (Replace the version with the current release from Maven Central.)
