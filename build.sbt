@@ -9,7 +9,7 @@ ThisBuild / scalaVersion           := "3.8.3"
 ThisBuild / organization           := "io.github.edadma"
 ThisBuild / organizationName       := "edadma"
 ThisBuild / organizationHomepage   := Some(url("https://github.com/edadma"))
-ThisBuild / version                := "0.1.0"
+ThisBuild / version                := "0.2.0"
 ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
 
 ThisBuild / publishConfiguration := publishConfiguration.value.withOverwrite(true).withChecksums(Vector.empty)
@@ -36,7 +36,7 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / homepage := Some(url("https://github.com/edadma/toml"))
-ThisBuild / description := "TOML 1.0.0-oriented parser (Scala parser combinators) for JVM, Scala.js, and Scala Native"
+ThisBuild / description := "TOML 1.1.0 parser (Scala parser combinators) for JVM, Scala.js, and Scala Native"
 
 ThisBuild / publishTo := sonatypePublishToBundle.value
 

@@ -3,7 +3,7 @@ package io.github.edadma.toml
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.input.CharArrayReader.EofCh
 
-/** Lexical analyzer based on `StdLexical`, with standard tokens plus TOML-specific literals (TOML 1.0.0 string escapes). */
+/** Lexical analyzer based on `StdLexical`, with standard tokens plus TOML-specific literals (TOML 1.1.0 string escapes). */
 class TomlLexical extends StdLexical:
 
   delimiters ++= Seq("[", "]", "{", "}", "=", ",", ".")
@@ -21,7 +21,7 @@ class TomlLexical extends StdLexical:
   case class MultilineLiteralStr(lexeme: String) extends Token:
     def chars: String = lexeme
 
-  /** TOML 1.0.0: control chars in comments except tab (U+0009). */
+  /** TOML 1.1.0: control chars in comments except tab (U+0009). */
   private def isIllegalCommentChar(c: Char): Boolean =
     val cp = c.toInt
     (cp >= 0x0000 && cp <= 0x0008) || (cp >= 0x000a && cp <= 0x001f) || cp == 0x007f
@@ -31,10 +31,13 @@ class TomlLexical extends StdLexical:
     val cp = c.toInt
     (cp >= 0x0000 && cp <= 0x0008) || (cp >= 0x000a && cp <= 0x001f) || cp == 0x007f
 
-  /** Multiline basic: allow tab, LF, CR; forbid other controls (spec 1.0.0). */
+  /** Multiline basic: allow tab and LF as raw characters; CR is only allowed as part of a CRLF newline
+    * (handled by [[crlfRun]]), so it counts as illegal here for the plain-character runs (spec 1.1.0). */
   private def isIllegalMlBasicChar(c: Char): Boolean =
     val cp = c.toInt
-    (cp >= 0x0000 && cp <= 0x0008) || cp == 0x000b || cp == 0x000c || (cp >= 0x000e && cp <= 0x001f) || cp == 0x007f
+    (cp >= 0x0000 && cp <= 0x0008) ||
+      cp == 0x000b || cp == 0x000c || cp == 0x000d ||
+      (cp >= 0x000e && cp <= 0x001f) || cp == 0x007f
 
   /** Multiline literal: same allowed line breaks as multiline basic. */
   private def isIllegalMlLiteralChar(c: Char): Boolean = isIllegalMlBasicChar(c)
@@ -91,8 +94,10 @@ class TomlLexical extends StdLexical:
         case 'n'  => success(List('\n'))
         case 'f'  => success(List('\u000c'))
         case 'r'  => success(List('\r'))
+        case 'e'  => success(List(''))                              // TOML 1.1.0
         case '"'  => success(List('"'))
         case '\\' => success(List('\\'))
+        case 'x'  => hexCodeUnits(2) ^^ (v => List(v.toChar))             // TOML 1.1.0: \xHH → U+00HH
         case 'u'  => hexCodeUnits(4).flatMap(v => unicodeBmp(v.toInt))
         case 'U'  =>
           hexCodeUnits(8).flatMap { v =>
@@ -100,11 +105,13 @@ class TomlLexical extends StdLexical:
             else if v >= 0xd800 && v <= 0xdfff then escFail("invalid \\U escape (surrogate code point)")
             else unicodeAny(v.toInt)
           }
-        case 'e' | 'x' =>
-          escFail("reserved escape \\e / \\x (invalid in TOML 1.0.0)")
         case c    => escFail(s"invalid escape \\$c")
       }
     )
+
+  /** A literal CRLF inside a multiline string body — the only way CR is allowed (spec 1.1.0). */
+  private def crlfRun: Parser[List[Char]] =
+    elem('\r') ~ elem('\n') ^^^ List('\r', '\n')
 
   /** v0.5.0+ "line-ending backslash": trim `\` and following whitespace until next non-whitespace or `"""`. */
   private def lineEndingBackslash: Parser[List[Char]] =
@@ -142,14 +149,19 @@ class TomlLexical extends StdLexical:
         | mlBasicQuoteBeforeClose
         | mlBasicTwoQuotes
         | mlBasicOneQuote
+        | crlfRun
         | plainRun,
     ) ^^ (_.flatten)
 
   private def triple(ch: Char): Parser[Unit] =
     elem("", _ == ch) ~ elem("", _ == ch) ~ elem("", _ == ch) ^^^ ()
 
+  /** Trim a single newline (LF or CRLF) immediately after the opening delimiter. */
+  private def trimOpeningNewline: Parser[Any] =
+    opt((elem('\r') ~ elem('\n')) | elem('\n'))
+
   private def mlBasicString: Parser[Token] =
-    (triple('"') ~> opt(elem("", _ == '\n'))) ~ mlBasicStringBody <~ triple('"') ^^ { case _ ~ chars =>
+    (triple('"') ~> trimOpeningNewline) ~ mlBasicStringBody <~ triple('"') ^^ { case _ ~ chars =>
       MultilineBasicStr(chars.mkString)
     }
 
@@ -162,7 +174,7 @@ class TomlLexical extends StdLexical:
     ) <~ elem("", _ == '\'') ^^ (cs => StringLit(cs.mkString))
 
   private def mlLiteralString: Parser[Token] =
-    triple('\'') ~> opt(elem("", _ == '\n')) >> { _ =>
+    triple('\'') ~> trimOpeningNewline >> { _ =>
       /** `''` followed by `'''` → two apostrophes, then closing delimiter. */
       def mlLitTwoBeforeClose: Parser[List[Char]] =
         (elem("", _ == '\'') ~ elem("", _ == '\'')) ~ guard(
@@ -188,6 +200,7 @@ class TomlLexical extends StdLexical:
           | mlLitOneBeforeClose
           | mlLitTwoQuotes
           | mlLitOneQuote
+          | crlfRun
           | rep1(elem("", c => c != '\'' && c != EofCh && !isIllegalMlLiteralChar(c))) ^^ (_.toList)
 
       rep(chunk) <~ triple('\'') ^^ (parts => MultilineLiteralStr(parts.flatten.mkString))
@@ -242,11 +255,15 @@ class TomlLexical extends StdLexical:
   private def fracSeconds: Parser[List[Char]] =
     elem("", _ == '.') ~ rep1(digit) ^^ { case d ~ ds => d :: ds }
 
-  /** `HH:MM:SS` with optional fractional seconds (required for datetimes and local times, TOML 1.0.0). */
-  private def partialTimeFull: Parser[List[Char]] =
-    digits2 ~ elem("", _ == ':') ~ digits2 ~ elem("", _ == ':') ~ digits2 ~ opt(fracSeconds) ^^ {
-      case hh ~ c1 ~ mm ~ c2 ~ ss ~ fo =>
-        hh ::: c1 :: mm ::: c2 :: ss ::: fo.getOrElse(Nil)
+  /** `HH:MM` with optional `:SS[.frac]`. TOML 1.1.0 allows omitting seconds (defaults to `:00`); the
+    * decoder pads them so downstream parsers always see a full `HH:MM:SS`. */
+  private def partialTime: Parser[List[Char]] =
+    digits2 ~ elem("", _ == ':') ~ digits2 ~ opt(
+      elem("", _ == ':') ~ digits2 ~ opt(fracSeconds) ^^ { case c ~ ss ~ fo =>
+        c :: ss ::: fo.getOrElse(Nil)
+      },
+    ) ^^ { case hh ~ c1 ~ mm ~ rest =>
+      hh ::: c1 :: mm ::: rest.getOrElse(Nil)
     }
 
   private def timeOffset: Parser[List[Char]] =
@@ -258,7 +275,7 @@ class TomlLexical extends StdLexical:
   /** `full-date` optionally followed by `T`/space + partial-time + optional offset. */
   private def dateTimeLit: Parser[Token] =
     digits4 ~ elem("", _ == '-') ~ digits2 ~ elem("", _ == '-') ~ digits2 ~ opt(
-      elem("", c => c == 'T' || c == 't' || c == ' ') ~ partialTimeFull ~ opt(timeOffset),
+      elem("", c => c == 'T' || c == 't' || c == ' ') ~ partialTime ~ opt(timeOffset),
     ) ^^ { case y ~ _ ~ mo ~ _ ~ d ~ rest =>
       val sb = new StringBuilder
       sb.append(y.mkString).append('-').append(mo.mkString).append('-').append(d.mkString)
@@ -272,7 +289,7 @@ class TomlLexical extends StdLexical:
 
   /** Local time of day only (`HH:MM:SS` with optional fraction). */
   private def localTimeOnlyLit: Parser[Token] =
-    partialTimeFull ^^ (t => DateTimeLit(t.mkString))
+    partialTime ^^ (t => DateTimeLit(t.mkString))
 
   private def intTokenDecimal: Parser[Token] =
     (opt(elem("sign", c => c == '+' || c == '-')) ~ decRun) <~

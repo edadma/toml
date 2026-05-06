@@ -11,15 +11,15 @@ import org.scalatest.matchers.should.Matchers
 
 import ujson.read as readJson
 
-/** Runs the [toml-test](https://github.com/toml-lang/toml-test) corpus for TOML 1.0.0. */
-class TomlOfficial1_0_0Spec extends AnyFlatSpec with Matchers:
+/** Runs the [toml-test](https://github.com/toml-lang/toml-test) corpus for TOML 1.1.0. */
+class TomlOfficial1_1_0Spec extends AnyFlatSpec with Matchers:
 
   private def testsRoot: Path =
     Option(System.getenv("TOML_TEST_ROOT"))
       .map(Paths.get(_))
       .getOrElse(Paths.get("third_party/toml-test/tests").toAbsolutePath)
 
-  private lazy val fileListPath: Path = testsRoot.resolve("files-toml-1.0.0")
+  private lazy val fileListPath: Path = testsRoot.resolve("files-toml-1.1.0")
 
   private def corpusAvailable: Boolean =
     Files.isDirectory(testsRoot) && Files.isRegularFile(fileListPath)
@@ -30,7 +30,7 @@ class TomlOfficial1_0_0Spec extends AnyFlatSpec with Matchers:
     dec.onUnmappableCharacter(CodingErrorAction.REPORT)
     dec.decode(ByteBuffer.wrap(Files.readAllBytes(path))).toString
 
-  "TOML 1.0.0 official corpus" should "be present (clone toml-lang/toml-test under third_party)" in {
+  "TOML 1.1.0 official corpus" should "be present (clone toml-lang/toml-test under third_party)" in {
     assume(corpusAvailable, s"missing $testsRoot or $fileListPath")
   }
 
@@ -87,4 +87,4 @@ class TomlOfficial1_0_0Spec extends AnyFlatSpec with Matchers:
     failures shouldBe empty
   }
 
-end TomlOfficial1_0_0Spec
+end TomlOfficial1_1_0Spec

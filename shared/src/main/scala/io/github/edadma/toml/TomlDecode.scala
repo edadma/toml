@@ -116,7 +116,7 @@ private[edadma] object TomlDecode:
         if i > 0 && s.indexOf('T') < 0 && s.indexOf('t') < 0 && s.contains('-') then s.patch(i, "T", 1)
         else s
 
-      val n = normSpace(t).replace('t', 'T').replace('z', 'Z')
+      val n = padMissingSeconds(normSpace(t).replace('t', 'T').replace('z', 'Z'))
 
       scala.util.Try(jt.OffsetDateTime.parse(n, isoOffset)).toOption
         .map(TomlValue.OffsetDateTime.apply)
@@ -124,5 +124,34 @@ private[edadma] object TomlDecode:
         .orElse(scala.util.Try(jt.LocalDate.parse(n, isoDate)).toOption.map(TomlValue.LocalDate.apply))
         .orElse(scala.util.Try(jt.LocalTime.parse(n, isoTime)).toOption.map(TomlValue.LocalTime.apply))
         .toRight(s"cannot parse datetime or time: $t")
+
+  /** TOML 1.1.0 lets `HH:MM` stand for `HH:MM:00` in offset/local date-times and local times.
+    * java.time's parsers don't accept the short form, so insert `:00` after any `HH:MM` that is
+    * either at the very start of the string (local time) or directly after a `T` (date-time). */
+  private def padMissingSeconds(s: String): String =
+    val sb = new StringBuilder(s.length + 3)
+    var i = 0
+    while i < s.length do
+      val atStart = i == 0
+      val afterT  = i > 0 && s.charAt(i - 1) == 'T'
+      if (atStart || afterT) && hasNakedHHMM(s, i) then
+        sb.append(s.substring(i, i + 5)).append(":00")
+        i += 5
+      else
+        sb.append(s.charAt(i))
+        i += 1
+    sb.toString
+
+  /** True if `s.substring(off, off+5)` is `HH:MM` with no fractional / second component immediately after. */
+  private def hasNakedHHMM(s: String, off: Int): Boolean =
+    if off + 5 > s.length then false
+    else
+      def d(k: Int) = s.charAt(off + k).isDigit
+      val shape = d(0) && d(1) && s.charAt(off + 2) == ':' && d(3) && d(4)
+      if !shape then false
+      else if off + 5 == s.length then true
+      else
+        val nxt = s.charAt(off + 5)
+        nxt != ':' && nxt != '.' && !nxt.isDigit
 
 end TomlDecode

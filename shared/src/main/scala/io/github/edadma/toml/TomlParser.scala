@@ -105,9 +105,15 @@ object TomlParser extends StdTokenParsers:
   private lazy val inlinePair: Parser[(List[String], TomlValue)] =
     dottedKey ~ keyword("=") ~ value ^^ { case k ~ _ ~ v => (k, v) }
 
+  /** TOML 1.1.0 allows newlines anywhere inside an inline table and a trailing comma after the last pair. */
   private lazy val inlineTable: Parser[TomlValue] =
-    (keyword("{") ~> repsep(inlinePair, keyword(",")) <~ keyword("}")) >> { pairs =>
-      TomlBuilder.mergeInlinePairs(pairs) match
+    def pad: Parser[Any] = rep(nl)
+    val pairs: Parser[List[(List[String], TomlValue)]] =
+      (inlinePair ~ rep(pad ~> keyword(",") ~> pad ~> inlinePair) ~ opt(pad ~> keyword(",")) ^^ {
+        case h ~ t ~ _ => h :: t
+      }) | success(Nil)
+    (keyword("{") ~> pad ~> pairs <~ pad <~ keyword("}")) >> { ps =>
+      TomlBuilder.mergeInlinePairs(ps) match
         case Right(m)  => success(TomlValue.Obj(m))
         case Left(msg) => failure(msg)
     }
